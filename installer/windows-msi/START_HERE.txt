@@ -1,0 +1,113 @@
+================================================================================
+      IT MONITORING AGENT - ONE-CLICK INSTALLER
+================================================================================
+
+QUICK START (Choose One):
+
+  Option 1 - Simple Installation (Recommended for most users)
+  -----------------------------------------------------------
+  Double-click: Install-Agent-GUI.vbs
+  
+  What happens:
+  - You'll be asked to enter the backend server URL
+  - A confirmation dialog will appear
+  - Windows will ask for Administrator permission (click Yes)
+  - Installation completes automatically!
+
+
+  Option 2 - Quick Install (For localhost testing)
+  -------------------------------------------------
+  Double-click: Install-Agent.vbs
+  
+  What happens:
+  - Uses default backend: http://localhost:5001
+  - Windows will ask for Administrator permission (click Yes)
+  - Installation completes automatically!
+
+
+  Option 3 - Advanced (For IT professionals)
+  ------------------------------------------
+  Double-click: install.bat
+  
+  Or use command line with parameters:
+    install.bat -backend http://your-server:5001
+    install.bat -backend http://192.168.1.100:5001 -interval 120
+
+
+ALL OPTIONS AUTO-ELEVATE!
+- No need to right-click "Run as Administrator"
+- Just double-click and follow the prompts
+- You'll see a UAC prompt - click "Yes" to continue
+
+================================================================================
+
+BEFORE YOU START:
+
+  1. Make sure you know your backend server URL
+     Examples:
+       http://localhost:5001              (for testing on this PC)
+       http://192.168.1.100:5001         (for local network server)
+       http://itmanagement.company.com   (for company server)
+
+  2. Close any antivirus popups if they appear
+     (The installer is safe - it's just being cautious)
+
+  3. Have Administrator password ready
+     (You'll be prompted by Windows UAC)
+
+================================================================================
+
+AFTER INSTALLATION:
+
+  The agent will:
+  ✓ Install to: C:\Program Files\ITMonitoringAgent
+  ✓ Create a Windows service (starts automatically)
+  ✓ Send installation notification to your backend
+  ✓ Begin monitoring this computer
+  ✓ Register with the backend server
+  ✓ Start sending telemetry data
+
+  Check installation success:
+  - Look for: C:\ProgramData\ITMonitoring\install_log.txt
+  - Service status: Open Services.msc, find "IT Management Monitoring Agent"
+  - Should show as "Running"
+
+================================================================================
+
+TROUBLESHOOTING:
+
+  Problem: UAC prompt doesn't appear
+  Solution: UAC might be disabled. Enable it in Control Panel.
+
+  Problem: "MSI file not found"
+  Solution: Make sure output\ITMonitoringAgent-1.0.0.msi exists.
+            Run build.bat first to create the MSI.
+
+  Problem: Installation fails
+  Solution: Check C:\ProgramData\ITMonitoring\install_log.txt for details
+
+  Problem: Service won't start
+  Solution: Make sure Python 3.7+ is installed on this computer
+
+================================================================================
+
+NEED HELP?
+
+  Documentation:
+    - ONE_CLICK_INSTALLATION.md      (Complete guide)
+    - QUICK_REFERENCE.md             (Command reference)
+    - INSTALLATION_NOTIFICATION_GUIDE.md (Technical details)
+
+  Contact IT Support:
+    Email: support@company.com
+    Phone: (555) 123-4567
+
+================================================================================
+
+Version: 1.0.0
+Last Updated: October 8, 2025
+
+(c) 2025 Your Company IT - All Rights Reserved
+================================================================================
+
+

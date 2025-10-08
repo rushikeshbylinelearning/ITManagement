@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <UI Id="CustomUI">
+      <!-- Use built-in WixUI_InstallDir as base -->
+      <UIRef Id="WixUI_Common" />
+
+      <!-- Define dialog sequence -->
+      <DialogRef Id="BrowseDlg" />
+      <DialogRef Id="DiskCostDlg" />
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="WelcomeDlg" />
+      <DialogRef Id="LicenseAgreementDlg" />
+      
+      <!-- Custom configuration dialog -->
+      <DialogRef Id="ConfigurationDlg" />
+      <DialogRef Id="VerifyReadyDlg" />
+
+      <!-- Dialog flow -->
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">NOT Installed</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigurationDlg">LicenseAccepted = "1"</Publish>
+      <Publish Dialog="ConfigurationDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="ConfigurationDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ConfigurationDlg">1</Publish>
+      <Publish Dialog="VerifyReadyDlg" Control="Next" Event="EndDialog" Value="Return">1</Publish>
+      
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="OpenPortal">OPENPORTAL="1"</Publish>
+    </UI>
+    
+    <!-- Configuration Dialog -->
+    <UI Id="ConfigurationDlg_Dialog">
+      <Dialog Id="ConfigurationDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Agent Configuration" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes" Text="Enter the configuration details for the monitoring agent." />
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+
+        <!-- Backend URL -->
+        <Control Id="BackendUrlLabel" Type="Text" X="20" Y="60" Width="290" Height="10" NoPrefix="yes" Text="Backend URL:" />
+        <Control Id="BackendUrlEdit" Type="Edit" X="20" Y="72" Width="320" Height="18" Property="BACKENDURL" />
+        
+        <!-- Registration URL -->
+        <Control Id="RegistrationUrlLabel" Type="Text" X="20" Y="95" Width="290" Height="10" NoPrefix="yes" Text="Registration URL:" />
+        <Control Id="RegistrationUrlEdit" Type="Edit" X="20" Y="107" Width="320" Height="18" Property="REGISTRATIONURL" />
+        
+        <!-- Registration Token -->
+        <Control Id="RegistrationTokenLabel" Type="Text" X="20" Y="130" Width="290" Height="10" NoPrefix="yes" Text="Registration Token (optional):" />
+        <Control Id="RegistrationTokenEdit" Type="Edit" X="20" Y="142" Width="320" Height="18" Property="REGISTRATIONTOKEN" Password="yes" />
+        
+        <!-- Polling Interval -->
+        <Control Id="PollingIntervalLabel" Type="Text" X="20" Y="165" Width="200" Height="10" NoPrefix="yes" Text="Polling Interval (seconds):" />
+        <Control Id="PollingIntervalEdit" Type="Edit" X="20" Y="177" Width="80" Height="18" Property="POLLINGINTERVAL" />
+        
+        <!-- Open Portal checkbox -->
+        <Control Id="OpenPortalCheckBox" Type="CheckBox" X="20" Y="200" Width="320" Height="17" Property="OPENPORTAL" CheckBoxValue="1" Text="Open IT Management Portal after installation" />
+
+        <!-- Navigation buttons -->
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+      </Dialog>
+    </UI>
+
+  </Fragment>
+</Wix>
+
+
+

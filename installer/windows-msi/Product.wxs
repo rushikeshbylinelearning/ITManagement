@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+  
+  <?define ProductVersion="1.0.0.0" ?>
+  <?define ProductName="IT Management Monitoring Agent" ?>
+  <?define Manufacturer="Your Company IT" ?>
+  <?define UpgradeCode="12345678-1234-1234-1234-123456789012" ?>
+  
+  <Product Id="*"
+           Name="$(var.ProductName)"
+           Language="1033"
+           Version="$(var.ProductVersion)"
+           Manufacturer="$(var.Manufacturer)"
+           UpgradeCode="$(var.UpgradeCode)">
+    
+    <Package InstallerVersion="200"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="$(var.ProductName) Installer"
+             Comments="Installs IT Management Monitoring Agent"
+             Manufacturer="$(var.Manufacturer)" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Custom properties for configuration -->
+    <Property Id="BACKENDURL" Value="https://itmanagement.company.com/api/monitoring/events">
+      <RegistrySearch Id="BackendUrlRegistry"
+                      Root="HKLM"
+                      Key="SOFTWARE\ITMonitoringAgent"
+                      Name="BackendUrl"
+                      Type="raw" />
+    </Property>
+
+    <Property Id="REGISTRATIONURL" Value="https://itmanagement.company.com/api/monitoring/register">
+      <RegistrySearch Id="RegistrationUrlRegistry"
+                      Root="HKLM"
+                      Key="SOFTWARE\ITMonitoringAgent"
+                      Name="RegistrationUrl"
+                      Type="raw" />
+    </Property>
+
+    <Property Id="REGISTRATIONTOKEN" Secure="yes" />
+    
+    <Property Id="POLLINGINTERVAL" Value="60" />
+    
+    <Property Id="OPENPORTAL" Value="1" />
+
+    <!-- Python is bundled, no detection needed -->
+    <Property Id="PYTHONPATH" Value="[INSTALLFOLDER]python\python.exe" />
+
+    <!-- Prerequisite checks -->
+    <Condition Message="This application requires Windows 10 or higher.">
+      <![CDATA[Installed OR (VersionNT >= 603)]]>
+    </Condition>
+
+    <Condition Message="This application requires a 64-bit operating system.">
+      <![CDATA[Installed OR VersionNT64]]>
+    </Condition>
+
+    <!-- Directory structure -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="ITMonitoringAgent">
+          <Directory Id="PYTHON_DIR" Name="python" />
+          <Directory Id="LogsFolder" Name="logs" />
+          <Directory Id="CacheFolder" Name="cache" />
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="IT Monitoring Agent" />
+      </Directory>
+    </Directory>
+
+    <!-- Components -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="AgentFiles" Guid="87654321-4321-4321-4321-210987654321">
+        <!-- Main agent script -->
+        <File Id="MonitoringAgentPy"
+              Source="monitoring_agent.py"
+              KeyPath="yes"
+              Checksum="yes" />
+        
+        <!-- Service wrapper -->
+        <File Id="ServiceWrapperPy"
+              Source="service_wrapper.py"
+              Checksum="yes" />
+        
+        <!-- Requirements -->
+        <File Id="RequirementsTxt"
+              Source="requirements.txt"
+              Checksum="yes" />
+        
+        <!-- NSSM executable -->
+        <File Id="NssmExe"
+              Source="nssm.exe"
+              Checksum="yes" />
+        
+        <!-- Documentation -->
+        <File Id="ReadmeTxt"
+              Source="README.txt"
+              Checksum="yes" />
+        
+        <File Id="LicenseTxt"
+              Source="License.txt"
+              Checksum="yes" />
+
+        <!-- Batch installer helper (replaces PowerShell) -->
+        <File Id="InstallHelperBat"
+              Source="install_helper.bat"
+              Checksum="yes" />
+
+        <!-- Python installation notifier -->
+        <File Id="InstallNotifierPy"
+              Source="install_notifier.py"
+              Checksum="yes" />
+
+        <!-- Registry entries for configuration -->
+        <RegistryKey Root="HKLM" Key="SOFTWARE\ITMonitoringAgent">
+          <RegistryValue Type="string" Name="InstallPath" Value="[INSTALLFOLDER]" KeyPath="no" />
+          <RegistryValue Type="string" Name="BackendUrl" Value="[BACKENDURL]" KeyPath="no" />
+          <RegistryValue Type="string" Name="RegistrationUrl" Value="[REGISTRATIONURL]" KeyPath="no" />
+          <RegistryValue Type="string" Name="Version" Value="$(var.ProductVersion)" KeyPath="no" />
+        </RegistryKey>
+      </Component>
+
+      <Component Id="ConfigFile" Guid="11111111-2222-3333-4444-555555555555">
+        <!-- Config file generated by custom action -->
+        <CreateFolder />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Shortcuts -->
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcuts" Guid="99999999-8888-7777-6666-555555555555">
+        <Shortcut Id="ViewLogsShortcut"
+                  Name="View Agent Logs"
+                  Description="View IT Monitoring Agent logs"
+                  Target="[LogsFolder]"
+                  WorkingDirectory="LogsFolder" />
+        
+        <Shortcut Id="ConfigFileShortcut"
+                  Name="Agent Configuration"
+                  Description="Edit agent configuration"
+                  Target="notepad.exe"
+                  Arguments="&quot;[INSTALLFOLDER]config.json&quot;"
+                  WorkingDirectory="INSTALLFOLDER" />
+        
+        <Shortcut Id="PortalShortcut"
+                  Name="IT Management Portal"
+                  Description="Open IT Management Portal"
+                  Target="[BACKENDURL]"
+                  Icon="PortalIcon" />
+        
+        <Shortcut Id="UninstallShortcut"
+                  Name="Uninstall IT Monitoring Agent"
+                  Description="Uninstall the monitoring agent"
+                  Target="[SystemFolder]msiexec.exe"
+                  Arguments="/x [ProductCode]" />
+        
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        
+        <RegistryValue Root="HKCU"
+                       Key="Software\ITMonitoringAgent"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Icon for shortcuts -->
+    <Icon Id="PortalIcon" SourceFile="icon.ico" />
+
+    <!-- Features -->
+    <Feature Id="ProductFeature" Title="IT Monitoring Agent" Level="1">
+      <ComponentRef Id="AgentFiles" />
+      <ComponentRef Id="ConfigFile" />
+      <ComponentRef Id="ApplicationShortcuts" />
+      <ComponentGroupRef Id="PythonComponents" />
+    </Feature>
+
+    <!-- Custom Actions -->
+    
+    <!-- NO POWERSHELL - All custom actions use batch files -->
+
+    <!-- Create config.json -->
+    <CustomAction Id="CreateConfigCA" 
+                  Property="CreateConfig" 
+                  Value="&quot;[INSTALLFOLDER]&quot;;&quot;[BACKENDURL]&quot;;&quot;[REGISTRATIONURL]&quot;;&quot;[REGISTRATIONTOKEN]&quot;;&quot;[POLLINGINTERVAL]&quot;" 
+                  Execute="immediate" />
+    
+    <CustomAction Id="CreateConfig"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_helper.bat&quot; CreateConfig &quot;[INSTALLFOLDER]&quot; &quot;[BACKENDURL]&quot; &quot;[REGISTRATIONURL]&quot; &quot;[REGISTRATIONTOKEN]&quot; &quot;[POLLINGINTERVAL]&quot;"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <!-- Create Windows service -->
+    <CustomAction Id="CreateServiceCA" 
+                  Property="CreateService" 
+                  Value="&quot;[INSTALLFOLDER]&quot;" 
+                  Execute="immediate" />
+    
+    <CustomAction Id="CreateService"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_helper.bat&quot; CreateService &quot;[INSTALLFOLDER]&quot;"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <!-- Start service -->
+    <CustomAction Id="StartServiceCA"
+                  Property="StartService"
+                  Value="&quot;[INSTALLFOLDER]&quot;"
+                  Execute="immediate" />
+
+    <CustomAction Id="StartService"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_helper.bat&quot; StartService"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <!-- Notify backend server of installation -->
+    <CustomAction Id="NotifyBackendCA"
+                  Property="NotifyBackend"
+                  Value="&quot;[INSTALLFOLDER]&quot;;&quot;[BACKENDURL]&quot;"
+                  Execute="immediate" />
+
+    <CustomAction Id="NotifyBackend"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_helper.bat&quot; NotifyBackend &quot;[INSTALLFOLDER]&quot; &quot;[BACKENDURL]&quot;"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <!-- Remove service on uninstall -->
+    <CustomAction Id="RemoveServiceCA"
+                  Property="RemoveService"
+                  Value="&quot;[INSTALLFOLDER]&quot;"
+                  Execute="immediate" />
+
+    <CustomAction Id="RemoveService"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_helper.bat&quot; RemoveService"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <!-- Open portal (optional - user initiated) -->
+    <CustomAction Id="OpenPortal"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c start [BACKENDURL]"
+                  Execute="immediate"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <!-- Installation sequence -->
+    <InstallExecuteSequence>
+      <!-- Agent installation -->
+      <Custom Action="CreateConfigCA" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="CreateConfig" After="CreateConfigCA">NOT Installed</Custom>
+      <Custom Action="CreateServiceCA" After="CreateConfig">NOT Installed</Custom>
+      <Custom Action="CreateService" After="CreateServiceCA">NOT Installed</Custom>
+      <Custom Action="StartServiceCA" After="CreateService">NOT Installed</Custom>
+      <Custom Action="StartService" After="StartServiceCA">NOT Installed</Custom>
+      
+      <!-- Notify backend server - runs AFTER everything is installed -->
+      <Custom Action="NotifyBackendCA" After="StartService">NOT Installed</Custom>
+      <Custom Action="NotifyBackend" After="NotifyBackendCA">NOT Installed</Custom>
+      
+      <!-- Uninstallation -->
+      <Custom Action="RemoveServiceCA" Before="RemoveFiles">Installed AND REMOVE="ALL"</Custom>
+      <Custom Action="RemoveService" After="RemoveServiceCA">Installed AND REMOVE="ALL"</Custom>
+    </InstallExecuteSequence>
+
+    <!-- UI sequence for portal launch -->
+    <InstallUISequence>
+      <Custom Action="OpenPortal" After="InstallFinalize">NOT Installed AND OPENPORTAL="1"</Custom>
+    </InstallUISequence>
+
+    <!-- Custom UI -->
+    <UIRef Id="CustomUI" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+
+  </Product>
+</Wix>
+
+
