@@ -28,7 +28,7 @@ const corsOptions = {
   origin: [
     'http://localhost:5175', // Vite dev server for this app
     'http://localhost:5174', // Vite dev server for this app
-    'http://localhost:5173', // Vite dev server for SSO Portal (optional but good for some flows)
+    'http://localhost:5173', // Vite dev server
     'http://localhost:3000',
     'https://itmanagement.bylinelms.com' // Production frontend
   ],
@@ -48,10 +48,37 @@ const io = new Server(server, {
 // =================================================================
 
 // Set security-related HTTP headers
-app.use(helmet());
+// Configure helmet with appropriate CSP for downloads and API calls
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: [
+        "'self'",
+        'http://localhost:5001',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'https://itmanagement.bylinelms.com',
+        'ws://localhost:5001',
+        'wss://itmanagement.bylinelms.com'
+      ],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      fontSrc: ["'self'", 'data:'],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // Body parser, reading data from body into req.body
-app.use(express.json({ limit: '10kb' }));
+// Increased limit to handle large payloads (agent registration, file uploads, etc.)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Cookie parser - MUST come before any routes that use cookies
 app.use(cookieParser());
@@ -71,12 +98,31 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Rate Limiting to prevent brute-force attacks
+// More lenient limits for development and monitoring
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // Limit each IP to 200 requests per window
-    message: 'Too many requests from this IP, please try again after 15 minutes'
+    max: 1000, // Increased limit for monitoring dashboard polling
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true,
+    legacyHeaders: false
 });
-app.use('/api', limiter);
+
+// Apply rate limiting to all API routes except monitoring
+app.use('/api', (req, res, next) => {
+    // Skip rate limiting for monitoring endpoints that need frequent polling
+    if (req.path.includes('/monitoring/') || req.path.includes('/auth/me')) {
+        return next();
+    }
+    return limiter(req, res, next);
+});
+
+// Apply stricter rate limiting to auth endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 50, // Stricter limit for auth endpoints
+    message: 'Too many authentication requests, please try again after 15 minutes'
+});
+app.use('/api/auth', authLimiter);
 
 // Custom middleware to make socket.io available to all routes
 app.use((req, res, next) => {
@@ -98,7 +144,7 @@ mongoose.connect(process.env.MONGO_URI)
 // =================================================================
 
 // --- Import Route Files ---
-const authRoutes = require('./routes/auth'); // Authentication routes (includes both SSO and traditional login)
+const authRoutes = require('./routes/auth'); // Authentication routes
 const assetRoutes = require('./routes/assets');
 const ticketRoutes = require('./routes/tickets');
 const userRoutes = require('./routes/users');
@@ -111,21 +157,20 @@ const hrInventoryRoutes = require('./routes/hrInventory');
 const roboticsInventoryRoutes = require('./routes/roboticsInventory');
 const adminRoutes = require('./routes/admin');
 const uploadRoutes = require('./routes/upload');
-const monitoringRoutes = require('./routes/monitoring');
-const activityMonitorRoutes = require('./routes/activityMonitor');
+const networkMonitoringRoutes = require('./routes/networkMonitoring');
 
 // --- Import Middleware ---
-const { protect, authorize } = require('./middleware/auth'); // ✅ CORRECTED: Use the new SSO-compatible middleware
+const { protect, authorize } = require('./middleware/auth');
 
 // --- Public Routes ---
 // These routes do not require a user to be logged in.
-// The SSO callback is the most important public route.
 app.use('/api/auth', authRoutes);
 app.use('/uploads', express.static('uploads'));
+app.use('/downloads', express.static('downloads')); // Network monitoring agent downloads
 
 // --- Protected Routes ---
 // The `protect` middleware will be applied to every route defined below this line.
-// It checks for the valid local session cookie (`it_app_token`).
+// It checks for the valid session cookie (`it_app_token`).
 app.use('/api/assets', protect, assetRoutes);
 app.use('/api/tickets', protect, ticketRoutes);
 app.use('/api/users', protect, userRoutes);
@@ -138,39 +183,7 @@ app.use('/api/hr-inventory', protect, hrInventoryRoutes);
 app.use('/api/robotics-inventory', protect, roboticsInventoryRoutes);
 app.use('/api/admin', protect, authorize('admin'), adminRoutes); // This one is protected AND admin-only
 app.use('/api/upload', protect, uploadRoutes);
-app.use('/api/monitoring', monitoringRoutes); // Monitoring routes (mixed auth: API key for agents, JWT for admin)
-app.use('/api/activity-monitor', activityMonitorRoutes); // Activity monitoring routes (mixed auth: agent token + JWT)
-
-// =================================================================
-
-// --- Socket.io Connection Logic ---
-io.on('connection', (socket) => {
-    console.log('A user connected to IT App via Socket.io:', socket.id);
-    socket.on('disconnect', () => {
-        console.log('User disconnected from IT App:', socket.id);
-    });
-});
-
-// --- Scheduled Tasks for Monitoring ---
-const { checkAllHostsStatus } = require('./utils/alertRules');
-
-// Check host status every 5 minutes
-setInterval(async () => {
-    try {
-        console.log('Running scheduled host status check...');
-        const alerts = await checkAllHostsStatus();
-        if (alerts.length > 0) {
-            console.log(`Generated ${alerts.length} offline host alerts`);
-            io.emit('monitoring:alerts', alerts);
-        }
-    } catch (error) {
-        console.error('Error in scheduled host status check:', error);
-    }
-}, 5 * 60 * 1000); // Every 5 minutes
-
-// --- Start Activity Analyzer Worker ---
-const activityAnalyzer = require('./worker/activityAnalyzer');
-activityAnalyzer.start();
+app.use('/api/network-monitoring', networkMonitoringRoutes); // Mixed auth: some routes use protect, some use agent verification
 
 // --- Start Server ---
 const PORT = process.env.PORT || 5001;
