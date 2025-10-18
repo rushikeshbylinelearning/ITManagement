@@ -125,3 +125,10 @@ Or through Windows "Add/Remove Programs" if using MSI installer.
 - Network data is encrypted in transit
 - No personal data or screen capture is collected
 
+
+
+
+
+
+
+

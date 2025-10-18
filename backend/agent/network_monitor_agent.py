@@ -28,8 +28,8 @@ import platform
 AGENT_VERSION = "1.0.0"
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".it_monitor", "config.json")
 LOG_FILE = os.path.join(os.path.expanduser("~"), ".it_monitor", "agent.log")
-BACKEND_URL = "https://itmanagement.bylinelms.com/api"  # Change to your backend URL
-BACKUP_BACKEND_URL = "http://localhost:5001/api"  # Development fallback
+BACKEND_URL = "http://localhost:5001/api"  # Development environment
+BACKUP_BACKEND_URL = "https://itmanagement.bylinelms.com/api"  # Production fallback
 UPDATE_INTERVAL = 10  # seconds
 HEARTBEAT_INTERVAL = 60  # seconds
 
@@ -43,6 +43,87 @@ class NetworkMonitorAgent:
         self.network_stats = defaultdict(lambda: {'upload': 0, 'download': 0, 'count': 0})
         self.last_net_io = None
         self.session = requests.Session()
+        
+        # Domain mapping for better service identification
+        self.domain_mapping = {
+            # Social Media
+            'facebook.com': 'Facebook',
+            'instagram.com': 'Instagram',
+            'twitter.com': 'Twitter',
+            'linkedin.com': 'LinkedIn',
+            'tiktok.com': 'TikTok',
+            'snapchat.com': 'Snapchat',
+            
+            # Video Platforms
+            'youtube.com': 'YouTube',
+            'vimeo.com': 'Vimeo',
+            'twitch.tv': 'Twitch',
+            'netflix.com': 'Netflix',
+            'hulu.com': 'Hulu',
+            'disney.com': 'Disney+',
+            'amazon.com': 'Amazon Prime',
+            
+            # Communication
+            'zoom.us': 'Zoom',
+            'teams.microsoft.com': 'Microsoft Teams',
+            'meet.google.com': 'Google Meet',
+            'webex.com': 'Webex',
+            'slack.com': 'Slack',
+            'discord.com': 'Discord',
+            'whatsapp.com': 'WhatsApp',
+            'telegram.org': 'Telegram',
+            
+            # Productivity
+            'office.com': 'Microsoft Office',
+            'google.com': 'Google Services',
+            'docs.google.com': 'Google Docs',
+            'drive.google.com': 'Google Drive',
+            'dropbox.com': 'Dropbox',
+            'onedrive.live.com': 'OneDrive',
+            'notion.so': 'Notion',
+            'trello.com': 'Trello',
+            'asana.com': 'Asana',
+            
+            # Development
+            'github.com': 'GitHub',
+            'gitlab.com': 'GitLab',
+            'bitbucket.org': 'Bitbucket',
+            'stackoverflow.com': 'Stack Overflow',
+            'stackexchange.com': 'Stack Exchange',
+            'dev.to': 'Dev.to',
+            'medium.com': 'Medium',
+            
+            # News & Information
+            'cnn.com': 'CNN',
+            'bbc.com': 'BBC',
+            'reuters.com': 'Reuters',
+            'nytimes.com': 'New York Times',
+            'washingtonpost.com': 'Washington Post',
+            'theguardian.com': 'The Guardian',
+            'reddit.com': 'Reddit',
+            
+            # E-commerce
+            'amazon.com': 'Amazon',
+            'ebay.com': 'eBay',
+            'shopify.com': 'Shopify',
+            'paypal.com': 'PayPal',
+            'stripe.com': 'Stripe',
+            
+            # Cloud Services
+            'aws.amazon.com': 'Amazon Web Services',
+            'azure.microsoft.com': 'Microsoft Azure',
+            'cloud.google.com': 'Google Cloud',
+            'digitalocean.com': 'DigitalOcean',
+            'linode.com': 'Linode',
+            
+            # Other Popular Services
+            'spotify.com': 'Spotify',
+            'apple.com': 'Apple Services',
+            'adobe.com': 'Adobe',
+            'salesforce.com': 'Salesforce',
+            'hubspot.com': 'HubSpot',
+            'mailchimp.com': 'Mailchimp'
+        }
         
         # Ensure config directory exists
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -174,18 +255,150 @@ class NetworkMonitorAgent:
         return connections
     
     def resolve_ip_to_domain(self, ip):
-        """Resolve IP address to domain name"""
+        """Resolve IP address to domain name with improved logic and fallback"""
         try:
-            # Try reverse DNS lookup
-            domain = socket.gethostbyaddr(ip)[0]
+            # Skip private IP addresses
+            if self.is_private_ip(ip):
+                return ip
+            
+            # Check if we have a known service mapping for this IP
+            service_name = self.get_service_name_by_ip(ip)
+            if service_name:
+                return service_name
+            
+            # Try reverse DNS lookup with timeout
+            try:
+                domain = socket.gethostbyaddr(ip)[0]
+            except (socket.herror, socket.gaierror, OSError):
+                # DNS resolution failed, use IP with generic service name
+                return f"service-{ip.split('.')[-1]}"
+            except Exception:
+                # Any other DNS error, use IP with generic service name
+                return f"service-{ip.split('.')[-1]}"
+            
+            # Clean up domain name
+            domain = domain.lower().strip()
+            
+            # Skip if it's just an IP-like domain
+            if self.is_ip_like(domain):
+                return f"service-{ip.split('.')[-1]}"
             
             # Extract main domain (e.g., youtube.com from www.youtube.com)
             parts = domain.split('.')
             if len(parts) >= 2:
-                return '.'.join(parts[-2:])
+                # Remove common subdomains
+                main_domain = '.'.join(parts[-2:])
+                
+                # Skip CDN and cloud provider domains that don't represent the actual service
+                cdn_domains = [
+                    'amazonaws.com', 'cloudfront.net', 'akamai.net', 'fastly.com',
+                    'cloudflare.com', 'maxcdn.com', 'jsdelivr.net', 'unpkg.com',
+                    'cdnjs.com', 'googleapis.com', 'gstatic.com', 'googleusercontent.com',
+                    'linodeusercontent.com', 'digitaloceanspaces.com', 'azureedge.net'
+                ]
+                
+                if main_domain in cdn_domains:
+                    # Try to get more specific info from the full domain
+                    if len(parts) >= 3:
+                        # Check if there's a service identifier in the subdomain
+                        subdomain = parts[0]
+                        service_indicators = ['api', 'www', 'app', 'service', 'cdn', 'static', 'assets']
+                        if subdomain not in service_indicators:
+                            return f"{subdomain}.{main_domain}"
+                    return main_domain
+                
+                # Check if we have a friendly name for this domain
+                friendly_name = self.domain_mapping.get(main_domain)
+                if friendly_name:
+                    return friendly_name
+                
+                return main_domain
             return domain
+        except Exception as e:
+            # Final fallback - use IP with generic service name
+            return f"service-{ip.split('.')[-1]}"
+    
+    def get_service_name_by_ip(self, ip):
+        """Get service name based on IP address ranges"""
+        try:
+            # Common service IP ranges
+            ip_parts = ip.split('.')
+            if len(ip_parts) != 4:
+                return None
+            
+            first_octet = int(ip_parts[0])
+            second_octet = int(ip_parts[1])
+            
+            # Google services
+            if first_octet == 142 and second_octet in [250, 251]:
+                return "Google Services"
+            elif first_octet == 172 and second_octet == 217:
+                return "Google Services"
+            elif first_octet == 216 and second_octet == 58:
+                return "Google Services"
+            elif first_octet == 74 and second_octet == 125:
+                return "Google Services"
+            
+            # Microsoft services
+            elif first_octet == 13 and second_octet == 107:
+                return "Microsoft Services"
+            elif first_octet == 20 and second_octet == 42:
+                return "Microsoft Services"
+            elif first_octet == 40 and second_octet == 126:
+                return "Microsoft Services"
+            
+            # Cloudflare
+            elif first_octet == 104 and second_octet == 18:
+                return "Cloudflare"
+            elif first_octet == 172 and second_octet == 64:
+                return "Cloudflare"
+            
+            # AWS
+            elif first_octet == 52 and second_octet in [201, 202, 203, 204, 205]:
+                return "Amazon Web Services"
+            elif first_octet == 54 and second_octet in [236, 237, 238, 239, 240]:
+                return "Amazon Web Services"
+            
+            # Akamai
+            elif first_octet == 159 and second_octet == 41:
+                return "Akamai CDN"
+            
+            # Facebook/Meta
+            elif first_octet == 31 and second_octet == 13:
+                return "Facebook Services"
+            elif first_octet == 66 and second_octet == 220:
+                return "Facebook Services"
+            
+            return None
         except:
-            return ip
+            return None
+    
+    def is_private_ip(self, ip):
+        """Check if IP is private/internal"""
+        try:
+            import ipaddress
+            return ipaddress.ip_address(ip).is_private
+        except:
+            # Fallback for older Python versions
+            private_ranges = [
+                '10.', '172.16.', '172.17.', '172.18.', '172.19.',
+                '172.20.', '172.21.', '172.22.', '172.23.', '172.24.',
+                '172.25.', '172.26.', '172.27.', '172.28.', '172.29.',
+                '172.30.', '172.31.', '192.168.', '127.', '169.254.'
+            ]
+            return any(ip.startswith(prefix) for prefix in private_ranges)
+    
+    def is_ip_like(self, domain):
+        """Check if domain looks like an IP address"""
+        try:
+            # Check if it's a valid IP
+            socket.inet_aton(domain)
+            return True
+        except:
+            # Check if it contains mostly numbers and dots
+            if domain.count('.') >= 2 and sum(c.isdigit() for c in domain) > len(domain) * 0.5:
+                return True
+            return False
     
     def monitor_network_traffic(self):
         """Monitor network traffic and categorize by domain"""
@@ -211,7 +424,7 @@ class NetworkMonitorAgent:
             # Map connections to domains and estimate data usage
             domain_usage = defaultdict(lambda: {'upload': 0, 'download': 0, 'count': 0})
             
-            if connections:
+            if connections and len(connections) > 0:
                 # Distribute bandwidth across active connections
                 upload_per_conn = upload_mb / len(connections)
                 download_per_conn = download_mb / len(connections)
@@ -226,6 +439,11 @@ class NetworkMonitorAgent:
                         domain_usage[domain]['count'] += 1
                     except Exception as e:
                         pass
+            elif upload_mb > 0 or download_mb > 0:
+                # If there's network activity but no connections, create a generic entry
+                domain_usage['system-activity']['upload'] = upload_mb
+                domain_usage['system-activity']['download'] = download_mb
+                domain_usage['system-activity']['count'] = 1
             
             # Update cumulative stats
             for domain, usage in domain_usage.items():
@@ -416,4 +634,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

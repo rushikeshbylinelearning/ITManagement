@@ -215,6 +215,36 @@ router.post('/logs', verifyAgent, async (req, res) => {
         timestamp: log.timestamp,
         websites: log.websites
       });
+      
+      // Also emit aggregated stats update
+      try {
+        const stats = await NetworkMonitoring.aggregate([
+          {
+            $match: {
+              timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalUpload: { $sum: '$totalUploadMB' },
+              totalDownload: { $sum: '$totalDownloadMB' },
+              totalData: { $sum: '$totalDataMB' },
+              recordCount: { $sum: 1 }
+            }
+          }
+        ]);
+        
+        const totalAgents = await SystemAgent.countDocuments({ isActive: true });
+        
+        req.io.emit('network-stats-update', {
+          totalAgents,
+          usage: stats[0] || { totalUpload: 0, totalDownload: 0, totalData: 0, recordCount: 0 },
+          timestamp: new Date()
+        });
+      } catch (error) {
+        console.error('Error emitting stats update:', error);
+      }
     }
 
     res.status(201).json({

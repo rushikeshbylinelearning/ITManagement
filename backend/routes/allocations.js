@@ -193,10 +193,22 @@ router.get('/my-assets', async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ msg: 'User not found' });
 
+        console.log(`🔍 Fetching assets for user: ${user.name} (${user._id})`);
+
         const allocation = await Allocation.findOne({ user: user._id });
         if (!allocation) {
+            console.log(`📭 No allocation found for user: ${user.name}`);
             return res.json({}); // Not an error, just no assets allocated
         }
+
+        console.log(`✅ Found allocation for user: ${user.name}`, {
+            cpuBox: allocation.cpuBox,
+            monitorMake: allocation.monitorMake,
+            keyboardMake: allocation.keyboardMake,
+            mouseMake: allocation.mouseMake,
+            laptopMake: allocation.laptopMake
+        });
+
         res.json(allocation);
     } catch (err) {
         console.error('Error fetching my-assets:', err);

@@ -80,8 +80,40 @@ def copy_agent_files():
         print(f"✗ Failed to copy agent files: {e}")
         return False
 
-def create_scheduled_task():
-    """Create Windows scheduled task to run agent on startup"""
+def install_windows_service():
+    """Install the agent as a Windows service for auto-start"""
+    try:
+        # Import service wrapper
+        service_script = os.path.join(INSTALL_DIR, 'service_wrapper.py')
+        
+        # Install the service using the service wrapper
+        result = subprocess.run([
+            sys.executable, service_script, 'install'
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print("✓ Windows service installed successfully")
+            
+            # Start the service immediately
+            start_result = subprocess.run([
+                sys.executable, service_script, 'start'
+            ], capture_output=True, text=True)
+            
+            if start_result.returncode == 0:
+                print("✓ Windows service started successfully")
+            else:
+                print(f"⚠ Service installed but failed to start: {start_result.stderr}")
+            
+            return True
+        else:
+            print(f"✗ Failed to install Windows service: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"✗ Failed to install Windows service: {e}")
+        return False
+
+def create_scheduled_task_fallback():
+    """Create Windows scheduled task as fallback method"""
     try:
         task_name = AGENT_NAME
         python_exe = sys.executable
@@ -142,7 +174,7 @@ def create_scheduled_task():
         # Clean up XML file
         os.remove(xml_file)
         
-        print("✓ Scheduled task created successfully")
+        print("✓ Scheduled task created as fallback")
         return True
     except Exception as e:
         print(f"✗ Failed to create scheduled task: {e}")
@@ -165,14 +197,27 @@ def add_to_registry():
         return False
 
 def start_agent():
-    """Start the agent"""
+    """Start the agent (service or scheduled task)"""
     try:
-        # Start the scheduled task
+        # Try to start the Windows service first
+        service_script = os.path.join(INSTALL_DIR, 'service_wrapper.py')
+        if os.path.exists(service_script):
+            result = subprocess.run([
+                sys.executable, service_script, 'start'
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print("✓ Agent service started successfully")
+                return True
+            else:
+                print(f"⚠ Service start failed: {result.stderr}")
+        
+        # Fallback: Start the scheduled task
         subprocess.Popen([
             'schtasks', '/Run', '/TN', AGENT_NAME
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        print("✓ Agent started successfully")
+        print("✓ Agent started via scheduled task")
         return True
     except Exception as e:
         print(f"✗ Failed to start agent: {e}")
@@ -187,6 +232,23 @@ def uninstall():
     print("Uninstalling IT Network Monitor Agent...")
     
     try:
+        # Stop and remove Windows service
+        try:
+            service_script = os.path.join(INSTALL_DIR, 'service_wrapper.py')
+            if os.path.exists(service_script):
+                # Stop the service
+                subprocess.run([
+                    sys.executable, service_script, 'stop'
+                ], capture_output=True, text=True)
+                
+                # Uninstall the service
+                subprocess.run([
+                    sys.executable, service_script, 'uninstall'
+                ], capture_output=True, text=True)
+                print("✓ Windows service removed")
+        except:
+            pass
+        
         # Stop and delete scheduled task
         try:
             subprocess.call([
@@ -255,11 +317,17 @@ def main():
     if not copy_agent_files():
         return False
     
-    # Step 4: Create scheduled task
-    if not create_scheduled_task():
-        return False
+    # Step 4: Install Windows service (primary method)
+    service_installed = install_windows_service()
     
-    # Step 5: Add to registry
+    # Step 5: Create scheduled task as fallback if service installation failed
+    if not service_installed:
+        print("⚠ Windows service installation failed, using scheduled task as fallback")
+        if not create_scheduled_task_fallback():
+            print("⚠ Both service and scheduled task installation failed")
+            # Continue with registry method as last resort
+    
+    # Step 6: Add to registry as additional fallback
     if not add_to_registry():
         print("⚠ Warning: Could not add registry entry (non-critical)")
     
@@ -301,4 +369,5 @@ if __name__ == "__main__":
         print(f"\n✗ Installation failed: {e}")
         input("\nPress Enter to exit...")
         sys.exit(1)
+
 
